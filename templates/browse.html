@@ -1,0 +1,300 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>FileGuard</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #15171c; color: #e8e8e8; margin: 0; padding: 0;
+    }
+    header {
+      display: flex; align-items: center; gap: 10px; padding: 14px 24px;
+      background: #1c1f26; border-bottom: 1px solid #2a2d35; position: sticky; top: 0; z-index: 10;
+    }
+    header .title { font-size: 1.1rem; }
+    .breadcrumbs { display: flex; align-items: center; gap: 6px; font-size: 0.9rem; flex-wrap: wrap; }
+    .breadcrumbs a { color: #9ab0d6; text-decoration: none; padding: 3px 4px; border-radius: 4px; }
+    .breadcrumbs a:hover { background: #262a33; color: #fff; }
+    .breadcrumbs .sep { color: #555; }
+    .breadcrumbs .current { color: #eee; font-weight: 600; padding: 3px 4px; }
+    main { padding: 20px 24px; max-width: 1200px; margin: 0 auto; }
+    .grid {
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+      gap: 14px;
+    }
+    .tile {
+      display: flex; flex-direction: column; align-items: center; gap: 8px;
+      padding: 14px 8px; border-radius: 10px; cursor: default; text-decoration: none;
+      color: inherit; background: #1c1f26; border: 1px solid #262930;
+      transition: background 0.12s, border-color 0.12s;
+    }
+    .tile:hover { background: #262a33; border-color: #353a45; }
+    .tile.dir { cursor: pointer; }
+    .tile .icon { font-size: 2.4rem; line-height: 1; }
+    .tile .name {
+      font-size: 0.8rem; text-align: center; word-break: break-word;
+      display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+      max-width: 100%;
+    }
+    #ctxmenu {
+      position: absolute; display: none; background: #22252d; border: 1px solid #353a45;
+      border-radius: 8px; padding: 5px; z-index: 1000; min-width: 190px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+    }
+    #ctxmenu button {
+      display: block; width: 100%; text-align: left; background: none; border: none;
+      color: #e8e8e8; padding: 9px 12px; cursor: pointer; font-size: 0.88rem; border-radius: 5px;
+    }
+    #ctxmenu button:hover { background: #2d6cdf; }
+    #resultbox {
+      position: fixed; bottom: 0; left: 0; right: 0; max-height: 45vh; overflow-y: auto;
+      background: #1a1d24; border-top: 2px solid #2d6cdf; padding: 18px 24px; display: none;
+      white-space: pre-wrap; font-family: ui-monospace, monospace; font-size: 0.85rem;
+      box-shadow: 0 -8px 24px rgba(0,0,0,0.4);
+    }
+    #resultbox.show { display: block; }
+    #resultbox .close { float: right; cursor: pointer; color: #999; font-family: sans-serif; }
+    #resultbox a { color: #6cf; }
+    #progresswrap { margin-top: 10px; display: none; }
+    #progresswrap.show { display: block; }
+    #progressbar {
+      width: 100%; height: 6px; background: #2a2d35; border-radius: 3px; overflow: hidden;
+    }
+    #progressfill {
+      height: 100%; width: 40%; background: #2d6cdf; border-radius: 3px;
+      animation: slide 1.1s ease-in-out infinite;
+    }
+    @keyframes slide {
+      0% { margin-left: -40%; }
+      100% { margin-left: 100%; }
+    }
+    #progresstime { font-family: ui-monospace, monospace; font-size: 0.78rem; color: #888; margin-top: 6px; }
+  </style>
+</head>
+<body>
+  <header>
+    <span class="title">🛡️</span>
+    <nav class="breadcrumbs">
+      {% for crumb in breadcrumbs %}
+        {% if not loop.last %}
+          <a href="/browse/{{ crumb.path }}">{{ crumb.name }}</a>
+          <span class="sep">/</span>
+        {% else %}
+          <span class="current">{{ crumb.name }}</span>
+        {% endif %}
+      {% endfor %}
+    </nav>
+  </header>
+
+  <main>
+    <div class="grid">
+      {% if parent is not none %}
+      <a class="tile dir" href="/browse/{{ parent }}">
+        <span class="icon">⬆️</span>
+        <span class="name">..</span>
+      </a>
+      {% endif %}
+      {% for e in entries %}
+        {% set ext = e.name.rsplit('.', 1)[-1].lower() if '.' in e.name else '' %}
+        {% if e.is_dir %}
+          {% set icon = '📁' %}
+        {% elif ext in ['mp4','mkv','avi','mov','webm','wmv','flv'] %}
+          {% set icon = '🎬' %}
+        {% elif ext in ['jpg','jpeg','png','gif','webp','bmp','svg'] %}
+          {% set icon = '🖼️' %}
+        {% elif ext in ['zip','tar','gz','tgz','7z','rar'] %}
+          {% set icon = '📦' %}
+        {% elif ext in ['mp3','flac','wav','aac','ogg','m4a'] %}
+          {% set icon = '🎵' %}
+        {% elif ext == 'pdf' %}
+          {% set icon = '📕' %}
+        {% elif ext in ['txt','md','json','xml','log','csv'] %}
+          {% set icon = '📄' %}
+        {% elif ext in ['py','js','ts','sh','c','cpp','java','go','rs','html','css'] %}
+          {% set icon = '💻' %}
+        {% else %}
+          {% set icon = '📄' %}
+        {% endif %}
+      {% if e.is_dir %}
+      <a class="tile dir" href="/browse/{{ e.rel_path }}" data-path="{{ e.rel_path }}" title="{{ e.name }}">
+        <span class="icon">{{ icon }}</span>
+        <span class="name">{{ e.name }}</span>
+      </a>
+      {% else %}
+      <div class="tile file" data-path="{{ e.rel_path }}" title="{{ e.name }}">
+        <span class="icon">{{ icon }}</span>
+        <span class="name">{{ e.name }}</span>
+      </div>
+      {% endif %}
+    {% endfor %}
+    </div>
+  </main>
+
+  <div id="ctxmenu">
+    <button id="ctx-clam">🛡️ Scan with ClamAV</button>
+    <button id="ctx-vt">🔍 Check on VirusTotal</button>
+    <button id="ctx-convert">🎞️ Convert to MP4</button>
+    <button id="ctx-extract">📦 Extract</button>
+    <button id="ctx-compress">🗜️ Compress</button>
+  </div>
+
+  <div id="resultbox">
+    <span class="close" onclick="document.getElementById('resultbox').classList.remove('show')">✕ close</span>
+    <div id="resultcontent"></div>
+    <div id="progresswrap">
+      <div id="progressbar"><div id="progressfill"></div></div>
+      <div id="progresstime"></div>
+    </div>
+  </div>
+
+  <script>
+    const ctxmenu = document.getElementById('ctxmenu');
+    const resultbox = document.getElementById('resultbox');
+    const resultcontent = document.getElementById('resultcontent');
+    let activePath = null;
+
+    document.querySelectorAll('.tile[data-path]').forEach(tile => {
+      tile.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        activePath = tile.dataset.path;
+        ctxmenu.style.display = 'block';
+        ctxmenu.style.left = e.pageX + 'px';
+        ctxmenu.style.top = e.pageY + 'px';
+      });
+    });
+
+    document.addEventListener('click', (e) => {
+      if (!ctxmenu.contains(e.target)) ctxmenu.style.display = 'none';
+    });
+
+    const progresswrap = document.getElementById('progresswrap');
+    const progresstime = document.getElementById('progresstime');
+    let progressTimer = null;
+    let progressStart = null;
+
+    function showResult(html) {
+      resultcontent.innerHTML = html;
+      resultbox.classList.add('show');
+    }
+
+    function startProgress() {
+      progressStart = Date.now();
+      progresswrap.classList.add('show');
+      progressTimer = setInterval(() => {
+        const secs = Math.floor((Date.now() - progressStart) / 1000);
+        const m = Math.floor(secs / 60);
+        const s = secs % 60;
+        progresstime.textContent = `${m}:${s.toString().padStart(2, '0')} elapsed`;
+      }, 500);
+    }
+
+    function stopProgress() {
+      clearInterval(progressTimer);
+      progresswrap.classList.remove('show');
+    }
+
+    document.getElementById('ctx-clam').onclick = async () => {
+      ctxmenu.style.display = 'none';
+      showResult('Scanning ' + activePath + ' ...');
+      startProgress();
+      try {
+        const res = await fetch('/api/clamscan?path=' + encodeURIComponent(activePath));
+        const data = await res.json();
+        stopProgress();
+        if (data.ok) {
+          const infected = data.returncode === 1;
+          showResult(`<b>${infected ? '⚠️ INFECTED' : '✅ Clean'}</b>: ${activePath}\n\n${data.output}`);
+        } else {
+          showResult('Error: ' + data.error);
+        }
+      } catch (e) {
+        stopProgress();
+        showResult('Request failed: ' + e);
+      }
+    };
+
+    document.getElementById('ctx-vt').onclick = async () => {
+      ctxmenu.style.display = 'none';
+      showResult('Checking ' + activePath + ' on VirusTotal ...');
+      startProgress();
+      try {
+        const res = await fetch('/api/vtcheck?path=' + encodeURIComponent(activePath));
+        const data = await res.json();
+        stopProgress();
+        if (!data.ok) {
+          showResult('Error: ' + data.error);
+        } else if (!data.found) {
+          showResult(`Not in VirusTotal's database yet.\nHash: ${data.hash}\n<a href="${data.report_url}" target="_blank">Upload manually</a>`);
+        } else {
+          showResult(`<b>${data.malicious > 0 ? '⚠️ ' + data.malicious + ' engines flagged this' : '✅ Clean'}</b>\nMalicious: ${data.malicious} / Suspicious: ${data.suspicious} / Harmless: ${data.harmless}\n<a href="${data.report_url}" target="_blank">Full report</a>`);
+        }
+      } catch (e) {
+        stopProgress();
+        showResult('Request failed: ' + e);
+      }
+    };
+
+    document.getElementById('ctx-convert').onclick = async () => {
+      ctxmenu.style.display = 'none';
+      showResult('Converting ' + activePath + ' to MP4 ... this can take a few minutes, keep this page open.');
+      startProgress();
+      try {
+        const res = await fetch('/api/convert?path=' + encodeURIComponent(activePath));
+        const data = await res.json();
+        stopProgress();
+        if (data.ok) {
+          showResult(`✅ Converted.\nSaved as: ${data.output_path}`);
+          setTimeout(() => location.reload(), 1500);
+        } else {
+          showResult('Error: ' + data.error);
+        }
+      } catch (e) {
+        stopProgress();
+        showResult('Request failed: ' + e);
+      }
+    };
+
+    document.getElementById('ctx-extract').onclick = async () => {
+      ctxmenu.style.display = 'none';
+      showResult('Extracting ' + activePath + ' ...');
+      startProgress();
+      try {
+        const res = await fetch('/api/extract?path=' + encodeURIComponent(activePath));
+        const data = await res.json();
+        stopProgress();
+        if (data.ok) {
+          showResult(`✅ Extracted.\nFolder: ${data.output_path}`);
+          setTimeout(() => location.reload(), 1500);
+        } else {
+          showResult('Error: ' + data.error);
+        }
+      } catch (e) {
+        stopProgress();
+        showResult('Request failed: ' + e);
+      }
+    };
+
+    document.getElementById('ctx-compress').onclick = async () => {
+      ctxmenu.style.display = 'none';
+      showResult('Compressing ' + activePath + ' ...');
+      startProgress();
+      try {
+        const res = await fetch('/api/compress?path=' + encodeURIComponent(activePath));
+        const data = await res.json();
+        stopProgress();
+        if (data.ok) {
+          showResult(`✅ Compressed.\nSaved as: ${data.output_path}`);
+          setTimeout(() => location.reload(), 1500);
+        } else {
+          showResult('Error: ' + data.error);
+        }
+      } catch (e) {
+        stopProgress();
+        showResult('Request failed: ' + e);
+      }
+    };
+  </script>
+</body>
+</html>
