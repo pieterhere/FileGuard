@@ -11,24 +11,23 @@ Self-hosted file manager with right-click security/utility actions. Built becaus
 
 ## Folder scope
 
-Browsable root is `/data` inside the container. Access is restricted by **Docker volume mounts only** (not app-level path filtering) — each host folder is mounted individually, so the container has zero visibility into anything not explicitly mounted:
+Browsable root is `/data` inside the container. Access is restricted by **Docker volume mounts only** (not app-level path filtering) — each host folder is mounted individually, so the container has zero visibility into anything not explicitly mounted.
 
-```
--v /home/cu3d/Documents:/data/Documents
--v /home/cu3d/Downloads:/data/Downloads
--v /home/cu3d/assets:/data/assets
--v /home/cu3d/Pictures:/data/Pictures
--v /home/cu3d/Music:/data/Music
--v /home/cu3d/calibre:/data/calibre
--v /home/cu3d/Videos:/data/Videos
--v <filebrowser_config_volume>:/config:ro
-```
+Which host folders get mounted is configured in `.env` (copy `.env.example`, fill in real paths — `.env` is gitignored, never committed) and wired up in `docker-compose.yml`. Add/remove a line in both files to change what's browsable.
 
-The `/config:ro` mount reuses FileBrowser's existing config volume read-only, so FileGuard can read the ClamAV database (`/config/clamav`) and VirusTotal API key (`/config/vt_api_key`) without duplicating them.
+The config folder (`CONFIG_DIR`, mounted read-only at `/config`) holds the ClamAV database (`/config/clamav`) and VirusTotal API key (`/config/vt_api_key`).
+
+## Setup
+
+```bash
+cp .env.example .env
+# edit .env: set AUTH_USER/AUTH_PASS and the real host folder paths
+docker compose up -d --build
+```
 
 ## Auth
 
-`AUTH_USER` / `AUTH_PASS` env vars, HTTP Basic Auth. No default password — `AUTH_PASS=""` always fails auth, so the container refuses to be usable until a real password is injected via `--env-file` at `docker run`. No session/token concept — every request re-checks the header.
+`AUTH_USER` / `AUTH_PASS` from `.env`, HTTP Basic Auth. No default password — an empty `AUTH_PASS` always fails auth, so the container refuses to be usable until a real password is set. No session/token concept — every request re-checks the header.
 
 ## Routes
 

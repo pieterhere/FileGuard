@@ -1,0 +1,20 @@
+services:
+  fileguard:
+    build: .
+    image: fileguard:local
+    container_name: fileguard
+    restart: unless-stopped
+    ports:
+      - "${PORT:-5060}:5060"
+    environment:
+      - AUTH_USER=${AUTH_USER}
+      - AUTH_PASS=${AUTH_PASS}
+    volumes:
+      - ${DOCUMENTS_DIR}:/data/Documents
+      - ${DOWNLOADS_DIR}:/data/Downloads
+      - ${ASSETS_DIR}:/data/assets
+      - ${PICTURES_DIR}:/data/Pictures
+      - ${MUSIC_DIR}:/data/Music
+      - ${CALIBRE_DIR}:/data/calibre
+      - ${VIDEOS_DIR}:/data/Videos
+      - ${CONFIG_DIR}:/config:ro
